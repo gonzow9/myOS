@@ -28,6 +28,7 @@ int set(char* var, char* value);
 int print(char* var);
 int run(char* script);
 int badcommandFileDoesNotExist();
+int echo(char *str);
 
 // Interpret commands and their arguments
 int interpreter(char* command_args[], int args_size) {
@@ -77,6 +78,10 @@ int interpreter(char* command_args[], int args_size) {
     } else if (strcmp(command_args[0], "run") == 0) {
         if (args_size != 2) return badcommand();
         return run(command_args[1]);
+    
+    } else if (strcmp(command_args[0], "echo") == 0) {
+        if (args_size != 2) return badcommand();
+        return echo(command_args[1]);
     
     } else return badcommand();
 }
@@ -142,4 +147,21 @@ int run(char *script) {
     fclose(p);
 
     return errCode;
+}
+
+int echo(char *str) {
+    if (str[0] != '$') {
+        printf("%s\n", str);
+    } else {
+        // add 1 to the substring pointer after the '$'
+        char *var = strchr(str, '$') + 1;
+        char *val = mem_get_value(var);
+        if (strcmp(val, "Variable does not exist") != 0) {
+            printf("%s\n", val);
+        } else {
+            printf("\n");
+        }
+    }
+    
+    return 0;
 }
