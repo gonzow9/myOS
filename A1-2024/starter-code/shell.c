@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h> 
-//#include <unistd.h>
+#include <unistd.h>
 #include "shell.h"
 #include "interpreter.h"
 #include "shellmemory.h"
@@ -24,11 +24,24 @@ int main(int argc, char *argv[]) {
     
     //init shell memory
     mem_init();
-    while(1) {							
-        printf("%c ", prompt);
-        // here you should check the unistd library 
-        // so that you can find a way to not display $ in the batch mode
-        fgets(userInput, MAX_USER_INPUT-1, stdin);
+
+    // Determine if we are in batch mode (input is from a file) or interactive mode
+    // Returns 1 if interactive, 0 if batch mode
+    int isInteractive = isatty(STDIN_FILENO);
+
+    while(1) {		
+        // Only display prompt in interactive mode					
+        if (isInteractive) {
+            printf("%c ", prompt);
+        }
+
+        if (fgets(userInput, MAX_USER_INPUT - 1, stdin) == NULL) {
+            // If we reach EOF in batch mode, break the loop and return to interactive mode
+            if (!isInteractive) {
+                break;
+            }
+        }
+
         errorCode = parseInput(userInput);
         if (errorCode == -1) exit(99);	// ignore all other errors
         memset(userInput, 0, sizeof(userInput));
