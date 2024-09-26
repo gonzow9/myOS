@@ -3,11 +3,16 @@
 #include <string.h> 
 #include "shellmemory.h"
 #include "shell.h"
-
-int MAX_ARGS_SIZE = 3;
+#define MAX_TOKENS 5
+int MAX_ARGS_SIZE = 7;
 
 int badcommand(){
     printf("Unknown Command\n");
+    return 1;
+}
+
+int badset(){
+    printf("Bad command: Too many tokens\n");
     return 1;
 }
 
@@ -28,8 +33,10 @@ int badcommandFileDoesNotExist();
 int interpreter(char* command_args[], int args_size) {
     int i;
 
-    if (args_size < 1 || args_size > MAX_ARGS_SIZE) {
+    if (args_size < 1) {
         return badcommand();
+    } else if (args_size > MAX_ARGS_SIZE) {
+        return badset();
     }
 
     for (i = 0; i < args_size; i++) { // terminate args at newlines
@@ -47,9 +54,21 @@ int interpreter(char* command_args[], int args_size) {
         return quit();
 
     } else if (strcmp(command_args[0], "set") == 0) {
-        //set
-        if (args_size != 3) return badcommand();	
-        return set(command_args[1], command_args[2]);
+        // Handle set command with multiple tokens for the value
+        if (args_size < 3) return badcommand(); 
+        
+        // Concatenate tokens starting from command_args[2] up to args_size
+        char value[MAX_USER_INPUT * MAX_TOKENS] = "";
+        for (i = 2; i < args_size; i++) {
+            strcat(value, command_args[i]);
+            if (i < args_size - 1) {
+                // Add space between tokens
+                strcat(value, " ");
+            }
+        }
+
+        // Call set function with concatenated value
+        return set(command_args[1], value);
     
     } else if (strcmp(command_args[0], "print") == 0) {
         if (args_size != 2) return badcommand();
@@ -81,19 +100,17 @@ int quit() {
 }
 
 int set(char *var, char *value) {
-    char *link = "=";
-
-    /* PART 1: You might want to write code that looks something like this.
-         You should look up documentation for strcpy and strcat.
-
-    char buffer[MAX_USER_INPUT];
-    strcpy(buffer, var);
-    strcat(buffer, link);
-    strcat(buffer, value);
-    */
-
+    // Creates a copy of the value string to tokenize
+    char value_copy[MAX_USER_INPUT];
+    strcpy(value_copy, value);
+    
+    // Tokenize the value string
+    char *tokens[MAX_TOKENS + 1]; // One extra to check for too many tokens
+    int token_count = 0;
+    
+    // Store the value (using your function to set the variable)
     mem_set_value(var, value);
-
+    
     return 0;
 }
 
