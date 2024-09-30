@@ -111,7 +111,7 @@ int interpreter(char* command_args[], int args_size) {
         if (args_size != 2) return badcommand();
         return my_cd(command_args[1]);
     
-    }  else return badcommand();
+    } else return badcommand();
 }
 
 int help() {
@@ -262,12 +262,12 @@ int my_mkdir(char *dirname) {
 
     if (dirname[0] == '$') {
         // Skip the "$" symbol
-        char *var = dirname + 1;
+        char *var = dirname + 1; 
         char *val = mem_get_value(var);
         char endChar = dirname[2];
         // Check 3 char is null terminating implies dirname is a single token
         if (strcmp(val, "Variable does not exist") != 0 && (endChar == '\0' && isalnum(var[0]))) {
-            status = mkdir(var, 0755);
+            status = mkdir(val, 0755);
         } else if (strcmp(val, "Variable does not exist") == 0 || !(endChar == '\0' && isalnum(var[0]))) {
             printf("Bad command: my_mkdir\n");
         }

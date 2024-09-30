@@ -5,6 +5,9 @@
 #include "shell.h"
 #include "interpreter.h"
 #include "shellmemory.h"
+#include <ctype.h>
+
+#define MAX_COMMANDS 10
 
 int parseInput(char ui[]);
 
@@ -56,7 +59,7 @@ int wordEnding(char c) {
     return c == '\0' || c == '\n' || c == ' ';
 }
 
-int parseInput(char inp[]) {
+int parseSingleInput(char inp[]) {
     char tmp[200], *words[100];                            
     int ix = 0, w = 0;
     int wordlen;
@@ -74,5 +77,37 @@ int parseInput(char inp[]) {
         ix++; 
     }
     errorCode = interpreter(words, w);
+    return errorCode;
+}
+
+int parseInput(char inp[]) {
+    char *commands[MAX_COMMANDS]; 
+    int commandCount = 0;
+    char *command;
+    int errorCode = 0;
+
+    // Split the input by semicolon (;)
+    command = strtok(inp, ";");
+    while (command != NULL && commandCount < 10) {
+        commands[commandCount++] = command;
+        command = strtok(NULL, ";");
+    }
+
+    // Execute each command one by one
+    for (int i = 0; i < commandCount; i++) {
+        // Remove leading and trailing spaces
+        char *trimmedCommand = commands[i];
+        while (isspace(*trimmedCommand)) trimmedCommand++;
+        char *end = trimmedCommand + strlen(trimmedCommand) - 1;
+        while (end > trimmedCommand && isspace(*end)) end--;
+        end[1] = '\0';
+
+        // Parse and execute the now single command
+        errorCode = parseSingleInput(trimmedCommand);
+        if (errorCode == -1) {
+            break;  // Exit on fatal error (like `quit`)
+        }
+    }
+
     return errorCode;
 }
