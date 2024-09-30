@@ -1,8 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h> 
+#include <dirent.h>
 #include "shellmemory.h"
 #include "shell.h"
+#include <ctype.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
 #define MAX_TOKENS 5
 int MAX_ARGS_SIZE = 7;
 
@@ -29,6 +34,13 @@ int print(char* var);
 int run(char* script);
 int badcommandFileDoesNotExist();
 int echo(char *str);
+int custom_sort(const struct dirent **a, const struct dirent **b);
+int my_ls();
+int my_mkdir(char *dirname);
+int is_alphanumeric(const char *str);
+int my_touch(char *filename);
+int my_cd(char *dirname);
+
 
 // Interpret commands and their arguments
 int interpreter(char* command_args[], int args_size) {
@@ -83,7 +95,23 @@ int interpreter(char* command_args[], int args_size) {
         if (args_size != 2) return badcommand();
         return echo(command_args[1]);
     
-    } else return badcommand();
+    } else if (strcmp(command_args[0], "my_ls") == 0) {
+        if (args_size != 1) return badcommand();
+        return my_ls();
+    
+    } else if (strcmp(command_args[0], "my_mkdir") == 0) {
+        if (args_size != 2) return badcommand();
+        return my_mkdir(command_args[1]);
+    
+    } else if (strcmp(command_args[0], "my_touch") == 0) {
+        if (args_size != 2) return badcommand();
+        return my_touch(command_args[1]);
+    
+    } else if (strcmp(command_args[0], "my_cd") == 0) {
+        if (args_size != 2) return badcommand();
+        return my_cd(command_args[1]);
+    
+    }  else return badcommand();
 }
 
 int help() {
@@ -163,5 +191,119 @@ int echo(char *str) {
         }
     }
     
+    return 0;
+}
+
+// Custom comparison function for sorting file names
+int custom_sort(const struct dirent **a, const struct dirent **b) {
+    // Get the file names
+    const char *nameA = (*a)->d_name;
+    const char *nameB = (*b)->d_name;
+
+    // Sort numbers before letters
+    if (isdigit(nameA[0]) && !isdigit(nameB[0])) {
+        return -1;
+    }
+    if (!isdigit(nameA[0]) && isdigit(nameB[0])) {
+        return 1;
+    }
+
+    // Sort uppercase before lowercase
+    if (tolower(nameA[0]) == tolower(nameB[0])) {
+        return nameA[0] - nameB[0];
+    }
+
+    // Regular alphabetical order
+    return strcmp(nameA, nameB);
+}
+
+// Filter function to exclude "." and ".."
+int filter(const struct dirent *entry) {
+    return (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0);
+}
+
+int my_ls() {
+    struct dirent **namelist;
+    int n;
+
+    // Scan current directory and apply filter and custom sort
+    n = scandir(".", &namelist, filter, custom_sort);
+    if (n < 0) {
+        perror("scandir");
+        return -1;
+    }
+
+    for (int i = 0; i < n; i++) {
+        printf("%s\n", namelist[i]->d_name);
+        // Free memory allocated by scandir for each pointer entry
+        free(namelist[i]);
+    }
+    free(namelist); 
+
+    return 0;
+}
+
+// Helper function to check if a string is alphanumeric
+int is_alphanumeric(const char *str) {
+    for (int i = 0; str[i] != '\0'; i++) {
+        if (!isalnum(str[i])) {
+            // Not alphanumeric
+            return 0; 
+        }
+    }
+
+    // Alphanumeric
+    return 1; 
+}
+
+
+int my_mkdir(char *dirname) {
+    int status;
+
+    if (dirname[0] == '$') {
+        // Skip the "$" symbol
+        char *var = dirname + 1;
+        char *val = mem_get_value(var);
+        char endChar = dirname[2];
+        // Check 3 char is null terminating implies dirname is a single token
+        if (strcmp(val, "Variable does not exist") != 0 && (endChar == '\0' && isalnum(var[0]))) {
+            status = mkdir(var, 0755);
+        } else if (strcmp(val, "Variable does not exist") == 0 || !(endChar == '\0' && isalnum(var[0]))) {
+            printf("Bad command: my_mkdir\n");
+        }
+    } else if (is_alphanumeric(dirname)) {
+        // just used 0755 permissions
+        status = mkdir(dirname, 0755);
+    }
+    
+    return 0;
+}
+
+int my_touch(char *filename) {
+    // Open the file with O_CREAT flag to create the file if it doesn't exist
+    FILE *file = fopen(filename, "w");
+    if (file == NULL) {
+        perror("my_touch: Error creating file");
+        return -1;
+    }
+
+    // Close the file immediately since we just creating it
+    fclose(file);
+
+    return 0;
+}
+
+int my_cd(char *dirname) {
+    if (!is_alphanumeric(dirname)) {
+        printf("Bad command: my_cd\n");
+        return 0;
+    }
+
+    if (chdir(dirname) == -1) {
+        printf("Bad command: my_cd\n");
+    }
+
+    //printf("my_cd: Succes)");
+
     return 0;
 }
