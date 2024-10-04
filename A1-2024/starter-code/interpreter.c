@@ -40,6 +40,7 @@ int my_mkdir(char *dirname);
 int is_alphanumeric(const char *str);
 int my_touch(char *filename);
 int my_cd(char *dirname);
+int contains_alphanum(const char *str);
 
 
 // Interpret commands and their arguments
@@ -256,6 +257,19 @@ int is_alphanumeric(const char *str) {
     return 1; 
 }
 
+// Helper function to check if a string contains an alphanumeric char
+int contains_alphanum(const char *str) {
+    for (int i = 0; str[i] != '\0'; i++) {
+        if (isalnum(str[i])) {
+            // contains an alphanumeric char
+            return 1; 
+        }
+    }
+
+    // Alphanumeric
+    return 0; 
+}
+
 
 int my_mkdir(char *dirname) {
     int status;
@@ -264,11 +278,9 @@ int my_mkdir(char *dirname) {
         // Skip the "$" symbol
         char *var = dirname + 1; 
         char *val = mem_get_value(var);
-        char endChar = dirname[2];
-        // Check 3 char is null terminating implies dirname is a single token
-        if (strcmp(val, "Variable does not exist") != 0 && (endChar == '\0' && isalnum(var[0]))) {
+        if (strcmp(val, "Variable does not exist") != 0 && contains_alphanum(var)) {
             status = mkdir(val, 0755);
-        } else if (strcmp(val, "Variable does not exist") == 0 || !(endChar == '\0' && isalnum(var[0]))) {
+        } else if (strcmp(val, "Variable does not exist") == 0 || !contains_alphanum(var)) {
             printf("Bad command: my_mkdir\n");
         }
     } else if (is_alphanumeric(dirname)) {
