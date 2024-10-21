@@ -260,14 +260,14 @@ int is_alphanumeric(const char *str) {
 // Helper function to check if a string contains an alphanumeric char
 int contains_alphanum(const char *str) {
     for (int i = 0; str[i] != '\0'; i++) {
-        if (isalnum(str[i])) {
-            // contains an alphanumeric char
-            return 1; 
+        if (!isalnum(str[i])) {
+            // doesn't contains an alphanumeric char
+            return 0; 
         }
     }
 
     // Alphanumeric
-    return 0; 
+    return 1; 
 }
 
 
@@ -278,9 +278,11 @@ int my_mkdir(char *dirname) {
         // Skip the "$" symbol
         char *var = dirname + 1; 
         char *val = mem_get_value(var);
-        if (strcmp(val, "Variable does not exist") != 0 && contains_alphanum(var)) {
+        if (strcmp(val, "Variable does not exist") != 0 && contains_alphanum(val)) {
             status = mkdir(val, 0755);
-        } else if (strcmp(val, "Variable does not exist") == 0 || !contains_alphanum(var)) {
+        } else if (strcmp(val, "Variable does not exist") == 0 || !contains_alphanum(val)) {
+            printf("Bad command: my_mkdir\n");
+        } else {
             printf("Bad command: my_mkdir\n");
         }
     } else if (is_alphanumeric(dirname)) {
@@ -314,8 +316,6 @@ int my_cd(char *dirname) {
     if (chdir(dirname) == -1) {
         printf("Bad command: my_cd\n");
     }
-
-    //printf("my_cd: Succes)");
 
     return 0;
 }
