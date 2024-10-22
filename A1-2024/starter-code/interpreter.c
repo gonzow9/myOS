@@ -9,7 +9,21 @@
 #include <unistd.h>
 
 #define MAX_TOKENS 5
+#define MAX_MEMORY 1000   // Maximum number of lines that the shell can store
+#define MAX_CHAR_INPUT 100  // Maximum characters per line of user input
 int MAX_ARGS_SIZE = 7;
+
+char shell_memory[MAX_MEMORY][MAX_CHAR_INPUT];
+
+
+typedef struct PCB {
+    int pid;                    // Unique Process ID
+    int start_position;         // Start position in shell memory
+    int current_instruction;    // Program counter
+    int length;                 // Number of instructions in the script
+    struct PCB *next;           // Pointer to the next PCB (for the ready queue)
+} PCB;
+
 
 int badcommand(){
     printf("Unknown Command\n");
@@ -153,29 +167,64 @@ int print(char *var) {
     return 0;
 }
 
-int run(char *script) {
-    int errCode = 0;
-    char line[MAX_USER_INPUT];
-    FILE *p = fopen(script, "rt");  // the program is in a file
+// A global ready queue and PCB array for simplicity
+PCB *ready_queue = NULL;
+int pid_counter = 0;
+int memory_position = 0;
 
+// Function to add a PCB to the ready queue
+void add_to_ready_queue(PCB *pcb) {
+    if (ready_queue == NULL) {
+        ready_queue = pcb;
+    } else {
+        PCB *current = ready_queue;
+        while (current->next != NULL) {
+            current = current->next;
+        }
+        current->next = pcb;
+    }
+}
+
+// Modified run function
+int run(char *script) {
+    FILE *p = fopen(script, "rt");
     if (p == NULL) {
         return badcommandFileDoesNotExist();
     }
 
-    fgets(line, MAX_USER_INPUT-1, p);
-    while (1) {
-        errCode = parseInput(line);	// which calls interpreter()
-        memset(line, 0, sizeof(line));
+    // Create and initialize the PCB for this process
+    PCB *pcb = (PCB *)malloc(sizeof(PCB));
+    pcb->pid = ++pid_counter;
+    pcb->start_position = memory_position;
+    pcb->current_instruction = pcb->start_position;
+    pcb->next = NULL;
 
-        if (feof(p)) {
-            break;
+    // Load the script into shell memory
+    char line[MAX_CHAR_INPUT];
+    int script_length = 0;
+    while (fgets(line, MAX_CHAR_INPUT - 1, p) != NULL) {
+        if (memory_position >= MAX_MEMORY) {
+            printf("Error: Shell memory is full.\n");
+            fclose(p);
+            free(pcb);
+            return -1;
         }
-        fgets(line, MAX_USER_INPUT-1, p);
+        strcpy(shell_memory[memory_position], line);
+        memory_position++;
+        script_length++;
     }
 
-    fclose(p);
+    // Close the file after loading the script
+    fclose(p);  
 
-    return errCode;
+    // Set the length of the script in the PCB
+    pcb->length = script_length;
+
+    // Add the PCB to the ready queue
+    add_to_ready_queue(pcb);
+
+    // Successful load
+    return 0;  
 }
 
 int echo(char *str) {
