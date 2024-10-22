@@ -56,6 +56,10 @@ int my_cd(char *dirname);
 int contains_alphanum(const char *str);\
 void scheduler();
 int exec(char* command_args[], int args_size);
+void sort_ready_queue_sjf();
+void scheduler_sjf();
+void scheduler_rr();
+
 
 
 // Interpret commands and their arguments
@@ -181,6 +185,7 @@ int memory_position = 0;
 
 // Function to add a PCB to the ready queue
 void add_to_ready_queue(PCB *pcb) {
+    pcb->next = NULL;  // Important to prevent loops
     if (ready_queue == NULL) {
         ready_queue = pcb;
     } else {
@@ -191,6 +196,7 @@ void add_to_ready_queue(PCB *pcb) {
         current->next = pcb;
     }
 }
+
 
 // Modified run function
 int run(char *script) {
@@ -401,7 +407,7 @@ int exec(char* args[], int args_size) {
         printf("Error: Invalid scheduling policy\n");
         return 1;
     }
-
+ 
     // Load up to 3 programs and create PCBs
     int num_programs = args_size - 2;  // Minus "exec" and "policy"
     PCB *pcb_list[3];  // Store PCBs for the programs
@@ -442,16 +448,93 @@ int exec(char* args[], int args_size) {
         pcb_list[i - 1] = pcb;
     }
 
-    // Add PCBs to the ready queue based on the scheduling policy
-    if (strcmp(policy, "FCFS") == 0) {
-        for (int i = 0; i < num_programs; i++) {
-            add_to_ready_queue(pcb_list[i]);  // FCFS - add in order of arrival
-        }
+    // Add all PCBs to the ready queue (same for all policies)
+    for (int i = 0; i < num_programs; i++) {
+        add_to_ready_queue(pcb_list[i]);
     }
-    // Additional policies like SJF, RR, and AGING will go here...
 
-    // Run the scheduler
-    scheduler();
+    // Determine which scheduling policy to use
+    if (strcmp(policy, "FCFS") == 0) {
+        scheduler();  // FCFS scheduler
+    } else if (strcmp(policy, "SJF") == 0) {
+        scheduler_sjf();  // SJF scheduler
+    } else if (strcmp(policy, "RR") == 0) {
+        scheduler_rr();  // RR scheduler
+    } else {
+        printf("Error: Invalid scheduling policy\n");
+        return 1;
+    }
 
     return 0;
 }
+
+// Helper function to sort PCBs by job length (Shortest Job First)
+void sort_ready_queue_sjf() {
+    if (ready_queue == NULL || ready_queue->next == NULL) return;
+
+    PCB *current, *next;
+    int swapped;
+    do {
+        swapped = 0;
+        current = ready_queue;
+
+        while (current->next != NULL) {
+            next = current->next;
+            if (current->length > next->length) {
+                // Swap PCBs if the current one has more lines than the next
+                PCB temp = *current;
+                *current = *next;
+                *next = temp;
+
+                // Restore next pointers after swapping
+                PCB *tempNext = current->next;
+                current->next = next->next;
+                next->next = tempNext;
+
+                swapped = 1;
+            }
+            current = current->next;
+        }
+    } while (swapped);
+}
+
+// SJF Scheduler
+void scheduler_sjf() {
+    sort_ready_queue_sjf();  // Sort by job length
+
+    while (ready_queue != NULL) {
+        PCB *pcb = ready_queue;  // Get the process at the head of the queue
+        for (int i = pcb->current_instruction; i < pcb->start_position + pcb->length; i++) {
+            parseInput(shell_memory[i]);  // Execute each instruction in the script
+        }
+
+        // After execution, remove the process from the queue and clean up
+        ready_queue = ready_queue->next;
+        free(pcb);
+    }
+}
+
+// RR Scheduler
+void scheduler_rr() {
+    int time_slice = 2;
+
+    while (ready_queue != NULL) {
+        PCB *pcb = ready_queue;
+        ready_queue = ready_queue->next;  // Remove from front
+
+        // Execute instructions
+        for (int i = 0; i < time_slice && pcb->current_instruction < pcb->start_position + pcb->length; i++) {
+            parseInput(shell_memory[pcb->current_instruction]);
+            pcb->current_instruction++;
+        }
+
+        if (pcb->current_instruction >= pcb->start_position + pcb->length) {
+            free(pcb);
+        } else {
+            pcb->next = NULL;  // Prevent potential cycles
+            add_to_ready_queue(pcb);
+        }
+    }
+}
+
+
