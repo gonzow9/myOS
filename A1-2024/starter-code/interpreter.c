@@ -15,7 +15,6 @@ int MAX_ARGS_SIZE = 7;
 
 char shell_memory[MAX_MEMORY][MAX_CHAR_INPUT];
 
-
 typedef struct PCB {
     int pid;                    // Unique Process ID
     int start_position;         // Start position in shell memory
@@ -54,7 +53,9 @@ int my_mkdir(char *dirname);
 int is_alphanumeric(const char *str);
 int my_touch(char *filename);
 int my_cd(char *dirname);
-int contains_alphanum(const char *str);
+int contains_alphanum(const char *str);\
+void scheduler();
+int exec(char* command_args[], int args_size);
 
 
 // Interpret commands and their arguments
@@ -125,6 +126,12 @@ int interpreter(char* command_args[], int args_size) {
     } else if (strcmp(command_args[0], "my_cd") == 0) {
         if (args_size != 2) return badcommand();
         return my_cd(command_args[1]);
+    
+    } else if (strcmp(command_args[0], "exec") == 0) {
+        if (args_size < 3 || args_size > 5) {
+            return badcommand(); 
+        }
+        return exec(command_args, args_size);
     
     } else return badcommand();
 }
@@ -223,8 +230,25 @@ int run(char *script) {
     // Add the PCB to the ready queue
     add_to_ready_queue(pcb);
 
+    // Call the scheduler to run the processes in the ready queue
+    scheduler();
+
     // Successful load
     return 0;  
+}
+
+// Function to execute processes in the ready queue (FCFS)
+void scheduler() {
+    while (ready_queue != NULL) {
+        PCB *pcb = ready_queue;  // Get the process at the head of the queue
+        for (int i = pcb->current_instruction; i < pcb->start_position + pcb->length; i++) {
+            parseInput(shell_memory[i]);  // Execute each instruction in the script
+        }
+
+        // After execution, remove the process from the queue and clean up
+        ready_queue = ready_queue->next;  // Move to the next process
+        free(pcb);  // Free memory allocated to the PCB
+    }
 }
 
 int echo(char *str) {
@@ -365,6 +389,69 @@ int my_cd(char *dirname) {
     if (chdir(dirname) == -1) {
         printf("Bad command: my_cd\n");
     }
+
+    return 0;
+}
+
+int exec(char* args[], int args_size) {
+    // Validate the last argument is a valid policy
+    char *policy = args[args_size - 1];
+    if (strcmp(policy, "FCFS") != 0 && strcmp(policy, "SJF") != 0 &&
+        strcmp(policy, "RR") != 0 && strcmp(policy, "AGING") != 0) {
+        printf("Error: Invalid scheduling policy\n");
+        return 1;
+    }
+
+    // Load up to 3 programs and create PCBs
+    int num_programs = args_size - 2;  // Minus "exec" and "policy"
+    PCB *pcb_list[3];  // Store PCBs for the programs
+    for (int i = 1; i <= num_programs; i++) {
+        FILE *p = fopen(args[i], "rt");
+        if (p == NULL) {
+            printf("Error: Could not open file %s\n", args[i]);
+            return badcommandFileDoesNotExist();
+        }
+
+        // Create PCB for the program
+        PCB *pcb = (PCB *)malloc(sizeof(PCB));
+        pcb->pid = ++pid_counter;
+        pcb->start_position = memory_position;
+        pcb->current_instruction = pcb->start_position;
+        pcb->next = NULL;
+
+        // Load the program into shell memory
+        char line[MAX_CHAR_INPUT];
+        int script_length = 0;
+        while (fgets(line, MAX_CHAR_INPUT - 1, p) != NULL) {
+            if (memory_position >= MAX_MEMORY) {
+                printf("Error: Shell memory is full\n");
+                fclose(p);
+                free(pcb);
+                return -1;
+            }
+            strcpy(shell_memory[memory_position], line);
+            memory_position++;
+            script_length++;
+        }
+        fclose(p);
+
+        // Set the length of the script in the PCB
+        pcb->length = script_length;
+
+        // Add the PCB to the list for scheduling
+        pcb_list[i - 1] = pcb;
+    }
+
+    // Add PCBs to the ready queue based on the scheduling policy
+    if (strcmp(policy, "FCFS") == 0) {
+        for (int i = 0; i < num_programs; i++) {
+            add_to_ready_queue(pcb_list[i]);  // FCFS - add in order of arrival
+        }
+    }
+    // Additional policies like SJF, RR, and AGING will go here...
+
+    // Run the scheduler
+    scheduler();
 
     return 0;
 }
