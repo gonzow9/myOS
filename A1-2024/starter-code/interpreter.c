@@ -596,8 +596,6 @@ void scheduler_sjf_aging() {
         if (ready_queue != NULL && ready_queue->job_length_score < current_job->job_length_score) {
             // Set new current job to be the head of the queue
             current_job = ready_queue;
-
-            //printf("Promoted process %d\n", current_job->pid);
         }
     }
 }
