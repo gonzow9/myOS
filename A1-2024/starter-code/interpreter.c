@@ -20,6 +20,7 @@ typedef struct PCB {
     int start_position;         // Start position in shell memory
     int current_instruction;    // Program counter
     int length;                 // Number of instructions in the script
+    int job_length_score;       // Job length score for aging
     struct PCB *next;           // Pointer to the next PCB (for the ready queue)
 } PCB;
 
@@ -59,7 +60,9 @@ int exec(char* command_args[], int args_size);
 void sort_ready_queue_sjf();
 void scheduler_sjf();
 void scheduler_rr();
-
+void scheduler_sjf_aging();
+void age_jobs();
+void sort_ready_queue_by_score();
 
 
 // Interpret commands and their arguments
@@ -227,11 +230,11 @@ int run(char *script) {
         script_length++;
     }
 
-    // Close the file after loading the script
     fclose(p);  
 
-    // Set the length of the script in the PCB
     pcb->length = script_length;
+
+    pcb->job_length_score = script_length;
 
     // Add the PCB to the ready queue
     add_to_ready_queue(pcb);
@@ -239,7 +242,6 @@ int run(char *script) {
     // Call the scheduler to run the processes in the ready queue
     scheduler();
 
-    // Successful load
     return 0;  
 }
 
@@ -441,8 +443,9 @@ int exec(char* args[], int args_size) {
         }
         fclose(p);
 
-        // Set the length of the script in the PCB
+        // Set the length and job length score of the script in the PCB
         pcb->length = script_length;
+        pcb->job_length_score = script_length;
 
         // Add the PCB to the list for scheduling
         pcb_list[i - 1] = pcb;
@@ -460,6 +463,8 @@ int exec(char* args[], int args_size) {
         scheduler_sjf();  // SJF scheduler
     } else if (strcmp(policy, "RR") == 0) {
         scheduler_rr();  // RR scheduler
+    } else if (strcmp(policy, "AGING") == 0) {
+        scheduler_sjf_aging();  // SJF with aging scheduler
     } else {
         printf("Error: Invalid scheduling policy\n");
         return 1;
@@ -537,4 +542,105 @@ void scheduler_rr() {
     }
 }
 
+void insert_into_ready_queue_sorted(PCB *pcb) {
+    if (ready_queue == NULL || pcb->job_length_score < ready_queue->job_length_score) {
+        pcb->next = ready_queue;
+        ready_queue = pcb;
+    } else {
+        PCB *current = ready_queue;
+        while (current->next != NULL && current->next->job_length_score <= pcb->job_length_score) {
+            current = current->next;
+        }
+        pcb->next = current->next;
+        current->next = pcb;
+    }
+}
 
+// SJF Scheduler with aging policy
+void scheduler_sjf_aging() {
+    // First sort jobs by score at the start
+    sort_ready_queue_by_score();
+
+    // after sorting, the head of queue has lowest score at the start
+    PCB *current_job = ready_queue;
+
+    while (ready_queue != NULL || current_job != NULL) {
+        if (current_job == NULL) {
+            if (ready_queue == NULL) break;  // No jobs left to schedule
+
+            // Get the job with the lowest job_length_score
+            current_job = ready_queue;
+        }
+
+        // Execute one instruction of the current job
+        parseInput(shell_memory[current_job->current_instruction]);
+        current_job->current_instruction++;
+
+        // Check if the job has finished
+        if (current_job->current_instruction >= current_job->start_position + current_job->length) {
+            // move to next lowest score job if current is finished
+            ready_queue = ready_queue->next;
+
+            free(current_job);
+            current_job = NULL;
+            continue;
+        }
+
+        // Age the other jobs
+        age_jobs();
+
+        // Re-sort the ready queue based on updated job_length_score
+        sort_ready_queue_by_score();
+
+        // Check for preemption
+        if (ready_queue != NULL && ready_queue->job_length_score < current_job->job_length_score) {
+            // Set new current job to be the head of the queue
+            current_job = ready_queue;
+
+            //printf("Promoted process %d\n", current_job->pid);
+        }
+    }
+}
+
+// Decreases the job_length_score of all jobs except the head of the queue
+void age_jobs() {
+    PCB *temp = ready_queue;
+
+    if (temp == NULL) return; // Ready queue is empty
+
+    temp = temp->next; // Skip the head of the ready queue
+
+    while (temp != NULL) {
+        if (temp->job_length_score > 0) {
+            temp->job_length_score--;
+        }
+        temp = temp->next;
+    }
+}
+
+
+void sort_ready_queue_by_score() {
+    if (ready_queue == NULL || ready_queue->next == NULL) return;
+
+    PCB *sorted = NULL;
+
+    while (ready_queue != NULL) {
+        PCB *current = ready_queue;
+        ready_queue = ready_queue->next;
+
+        // Insert current into sorted list
+        if (sorted == NULL || current->job_length_score < sorted->job_length_score) {
+            current->next = sorted;
+            sorted = current;
+        } else {
+            PCB *s_current = sorted;
+            while (s_current->next != NULL && s_current->next->job_length_score <= current->job_length_score) {
+                s_current = s_current->next;
+            }
+            current->next = s_current->next;
+            s_current->next = current;
+        }
+    }
+
+    ready_queue = sorted;
+}
