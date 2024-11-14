@@ -10,11 +10,17 @@
 #define MAX_COMMANDS 10
 
 int parseInput(char ui[]);
+void init_backing_store();
+void init_frame_store();
 
 // Start of everything
 int main(int argc, char *argv[]) {
-    printf("Shell version 1.3 created September 2024\n\n");
+    printf("”Frame Store Size = %d; Variable Store Size = %d”\n\n", FRAME_STORE_SIZE, VARIABLE_STORE_SIZE);
     //help();
+    // Initialize backing store
+    init_backing_store();
+    // Initialize frame store
+    init_frame_store();
 
     char prompt = '$';  				// Shell prompt
     char userInput[MAX_USER_INPUT];		// user's input stored here
