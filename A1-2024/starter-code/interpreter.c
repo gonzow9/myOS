@@ -17,7 +17,11 @@
 #define MAX_ARGS_SIZE 7
 #define FRAME_SIZE 3              // Each frame holds 3 lines
 #define NUM_FRAMES (FRAME_STORE_SIZE / FRAME_SIZE)
+#define FREE_FRAME 0
+#define OCCUIPED_FRAME 1
+#define PAGE_NOT_LOADED -1
 
+// Structure representing a loaded script
 typedef struct LoadedScript {
     char *script_name;             // Name of the script
     char *backing_store_filename;  // Unique filename in the backing store
@@ -37,33 +41,22 @@ typedef struct PCB {
     int job_length_score;        // Job length score for aging
     LoadedScript *loaded_script; // Pointer to the LoadedScript
     struct PCB *next;            // Pointer to the next PCB (for the ready queue)
-    //int pc;                      // Program Counter
+    //int pc;                      // Program Counter   
 } PCB;
 
-PCB *ready_queue = NULL; // A global ready queue for the PCBs
-int pid_counter = 0;
-LoadedScript *loaded_scripts = NULL; // Head of the loaded scripts list
+// Global Variables
+PCB *ready_queue = NULL;                // A global ready queue for the PCBs
+int pid_counter = 0;                    // PID counter for assigning unique process IDs
+LoadedScript *loaded_scripts = NULL;    // Head of the loaded scripts list
 char frame_store[NUM_FRAMES][FRAME_SIZE][MAX_LINE_LENGTH];
-int frame_occupied[NUM_FRAMES]; // 0 = free, 1 = occupied
-int global_time = 0;
-int frame_last_used[NUM_FRAMES];
+int frame_occupied[NUM_FRAMES];         // Frame occupied status (0 = free, 1 = occupied)
+int global_time = 0;                    // Global time counter for LRU policy
+int frame_last_used[NUM_FRAMES];        // Array to track the last used time of each frame
 
-int badcommand(){
-    printf("Unknown Command\n");
-    return 1;
-}
-
-int badset(){
-    printf("Bad command: Too many tokens\n");
-    return 1;
-}
-
-// For run command only
-int badcommandFileDoesNotExist(){
-    printf("Bad command: File not found\n");
-    return 3;
-}
-
+// Function declarations
+int badcommand();
+int badset();
+int badcommandFileDoesNotExist();
 int help();
 int quit();
 int set(char* var, char* value);
@@ -86,7 +79,7 @@ void scheduler_sjf_aging();
 void age_jobs();
 void sort_ready_queue_by_score();
 
-// Memory managment
+// Memory managment functions
 void init_backing_store();
 LoadedScript *find_loaded_script(char *script_name);
 void add_loaded_script(LoadedScript *script);
@@ -210,7 +203,23 @@ int print(char *var) {
     return 0;
 }
 
-// Function to add a PCB to the ready queue
+int badcommand(){
+    printf("Unknown Command\n");
+    return 1;
+}
+
+int badset(){
+    printf("Bad command: Too many tokens\n");
+    return 1;
+}
+
+// For run command only
+int badcommandFileDoesNotExist(){
+    printf("Bad command: File not found\n");
+    return 3;
+}
+
+// Adds a PCB to the end of the ready queue.
 void add_to_ready_queue(PCB *pcb) {
     pcb->next = NULL;  // Important to prevent loops
     if (ready_queue == NULL) {
@@ -224,7 +233,7 @@ void add_to_ready_queue(PCB *pcb) {
     }
 }
 
-// Modified run function
+// Runs a script by creating a PCB and adding it to the ready queue.
 int run(char *script) {
     // Initialize backing store if not already initialized
     init_backing_store();
@@ -239,8 +248,7 @@ int run(char *script) {
         loaded_script->ref_count = 1;
         loaded_script->next = NULL;
 
-        // Copy script to backing store and initialize pages_max, pageTable, 
-        // and script_length of the loaded_script
+        // Copy script to backing store and initialize
         copy_script_to_backing_store(loaded_script);
 
         // Load the first two pages into frames
@@ -253,8 +261,7 @@ int run(char *script) {
         }
         add_loaded_script(loaded_script);
     } else {
-        // Script is already loaded
-        // Increment reference count
+        // Script is already loaded: increment reference count
         loaded_script->ref_count++;
     }
 
@@ -268,7 +275,6 @@ int run(char *script) {
     // Initialize job_length_score based on the actual number of instructions
     pcb->job_length_score = loaded_script->script_length;
 
-    // Add the PCB to the ready queue
     add_to_ready_queue(pcb);
 
     // Call the scheduler to run the processes in the ready queue
@@ -277,9 +283,10 @@ int run(char *script) {
     return 0;  
 }
 
+// First-Come, First-Served (FCFS) scheduler.
 void scheduler() {
     while (ready_queue != NULL) {
-        PCB *pcb = ready_queue;  // Get the process at the head of the queue
+        PCB *pcb = ready_queue; 
         ready_queue = ready_queue->next;  // Move to the next process
 
         // Execute instructions
@@ -288,7 +295,7 @@ void scheduler() {
 
             if (frame_number == -1) {
                 printf("Error: Page %d not loaded in memory\n", pcb->PC_page);
-                // Handle error (e.g., terminate process)
+                // Handle error
                 break;
             }
 
@@ -306,8 +313,6 @@ void scheduler() {
         }
 
         // After execution, clean up
-
-        // Decrement the ref_count of the LoadedScript
         pcb->loaded_script->ref_count--;
 
         // Check if ref_count is zero
@@ -316,9 +321,9 @@ void scheduler() {
             remove_loaded_script(pcb->loaded_script);
         }
 
-        // Free the PCB
+        // Free the PCB memory 
         free(pcb->pageTable);
-        free(pcb);  // Free memory allocated to the PCB
+        free(pcb); 
     }
 }
 
@@ -339,7 +344,7 @@ int echo(char *str) {
     return 0;
 }
 
-// Custom comparison function for sorting file names
+// Custom comparison function for sorting file names in my_ls command
 int custom_sort(const struct dirent **a, const struct dirent **b) {
     // Get the file names
     const char *nameA = (*a)->d_name;
@@ -388,7 +393,7 @@ int my_ls() {
     return 0;
 }
 
-// Helper function to check if a string is alphanumeric
+// Check if a string is alphanumeric
 int is_alphanumeric(const char *str) {
     for (int i = 0; str[i] != '\0'; i++) {
         if (!isalnum(str[i])) {
@@ -401,7 +406,7 @@ int is_alphanumeric(const char *str) {
     return 1; 
 }
 
-// Helper function to check if a string contains an alphanumeric char
+// Checks if a string contains only alphanumeric characters
 int contains_alphanum(const char *str) {
     for (int i = 0; str[i] != '\0'; i++) {
         if (!isalnum(str[i])) {
@@ -410,7 +415,7 @@ int contains_alphanum(const char *str) {
         }
     }
 
-    // Contains alphanumeric
+    // Contains only alphanumeric
     return 1; 
 }
 
@@ -444,7 +449,6 @@ int my_touch(char *filename) {
         return -1;
     }
 
-    // Close the file immediately since we're just creating it
     fclose(file);
 
     return 0;
@@ -463,11 +467,12 @@ int my_cd(char *dirname) {
     return 0;
 }
 
+// Handles the exec command by loading scripts and scheduling them
 int exec(char* args[], int args_size) {
     // Initialize backing store in case not already
     init_backing_store();
 
-    // Validate the last argument is a valid policy
+    // Check the last argument is a valid policy
     char *policy = args[args_size - 1];
     if (strcmp(policy, "FCFS") != 0 && strcmp(policy, "SJF") != 0 &&
         strcmp(policy, "RR") != 0 && strcmp(policy, "AGING") != 0) {
@@ -492,8 +497,7 @@ int exec(char* args[], int args_size) {
             loaded_script->ref_count = 1;
             loaded_script->next = NULL;
 
-            // Copy script to backing store and initialize pages_max, pageTable, 
-            // and script_length of the loaded_script
+            // Copy script to backing store and initialize
             copy_script_to_backing_store(loaded_script);
 
             // Load the first two pages into frames
@@ -507,8 +511,7 @@ int exec(char* args[], int args_size) {
 
             add_loaded_script(loaded_script);
         } else {
-            // Script is already loaded
-            // Increment reference count
+            // Script is already loaded: increment reference count
             loaded_script->ref_count++;
         }
 
@@ -519,7 +522,6 @@ int exec(char* args[], int args_size) {
         pcb->PC_offset = 0;
         pcb->loaded_script = loaded_script;
         pcb->next = NULL;
-        // Initialize job_length_score based on the actual number of instructions
         pcb->job_length_score = loaded_script->script_length;
 
         // Add the PCB to the list for scheduling
@@ -629,7 +631,7 @@ void scheduler_rr() {
             // Get the next job from the ready queue
             current_job = ready_queue;
             ready_queue = ready_queue->next;
-            current_job->next = NULL;  // Detach from ready queue
+            current_job->next = NULL;  // Break off from ready queue
         }
 
         int instructions_executed = 0;
@@ -643,8 +645,7 @@ void scheduler_rr() {
                 // Job has finished
                 current_job->loaded_script->ref_count--;
                 if (current_job->loaded_script->ref_count == 0) {
-                    // Do not clean up pages in the frame store
-                    // Remove the loaded script which frees the page table
+                    // Remove the loaded script
                     remove_loaded_script(current_job->loaded_script);
                     current_job->loaded_script = NULL;
                 }
@@ -655,20 +656,16 @@ void scheduler_rr() {
 
             // Get frame number from page table
             int frame_number = current_job->loaded_script->pageTable[current_job->PC_page];
-            if (frame_number == -1) {
+            if (frame_number == PAGE_NOT_LOADED) {
                 // Page fault occurred
-                // Interrupt current process and place it at the back of the ready queue
-                // Handle page fault: Load missing page
                 handle_page_fault(current_job);
-
-                // Break out of the time slice loop
-                break;
+                break; // Break out of the time slice loop
             }
 
             // Get instruction
             char *instruction = frame_store[frame_number][current_job->PC_offset];
 
-            // Make a copy of the instruction to prevent modification of the frame store
+            // Make a copy of the instruction to prevent changes of the frame store
             char instruction_copy[MAX_LINE_LENGTH];
             strcpy(instruction_copy, instruction);
 
@@ -713,32 +710,20 @@ void scheduler_sjf_aging() {
             current_job = ready_queue;
         }
 
-        // printf("Executing PID %d, PC_page %d, PC_offset %d, job_length_score %d\n",
-        // current_job->pid, current_job->PC_page, current_job->PC_offset, current_job->job_length_score);
-
         // Execute one instruction of the current job
         int frame_number = current_job->pageTable[current_job->PC_page];
         if (frame_number == -1) {
             printf("Error: Page %d not loaded in memory\n", current_job->PC_page);
             // Handle error (terminate process ?)
-            // Remove current_job from ready_queue
             ready_queue = ready_queue->next;
             free(current_job->pageTable);
             free(current_job);
             current_job = NULL;
             continue;
         }
+
         char *instruction = frame_store[frame_number][current_job->PC_offset];
         parseInput(instruction);
-
-        // After aging jobs
-        // printf("Aged jobs in ready_queue. Current job_length_scores:\n");
-        // PCB *temp = ready_queue;
-        // printf("Current Job instr: %s\n", instruction);
-        // while (temp != NULL) {
-        //     printf("PID %d: %d\n", temp->pid, temp->job_length_score);
-        //     temp = temp->next;
-        // }
 
         // Update PC_offset and PC_page
         current_job->PC_offset++;
@@ -777,13 +762,13 @@ void scheduler_sjf_aging() {
     }
 }
 
-// Decreases the job_length_score of all jobs except the current job
+// Decreases the job_length_score of all other jobs except the current job
 void age_jobs() {
     PCB *temp = ready_queue;
 
     if (temp == NULL) return; // Ready queue is empty
 
-    temp = temp->next; // Skip the head of the ready queue
+    temp = temp->next; // Skip the head of the ready queue as it is the current job
 
     while (temp != NULL) {
         if (temp->job_length_score > 0) {
@@ -793,6 +778,7 @@ void age_jobs() {
     }
 }
 
+// Sorts the ready queue based on job_length_score for SJF with aging.
 void sort_ready_queue_by_score() {
     if (ready_queue == NULL || ready_queue->next == NULL) return;
 
@@ -819,6 +805,7 @@ void sort_ready_queue_by_score() {
     ready_queue = sorted;
 }
 
+// Initializes the backing store directory.
 void init_backing_store() {
     DIR *dir = opendir("backing_store");
     struct dirent *entry;
@@ -846,6 +833,7 @@ void init_backing_store() {
     }
 }
 
+// Finds a loaded script by name.
 LoadedScript *find_loaded_script(char *script_name) {
     LoadedScript *current = loaded_scripts;
     while (current != NULL) {
@@ -857,13 +845,14 @@ LoadedScript *find_loaded_script(char *script_name) {
     return NULL;
 }
 
+// Adds a LoadedScript to the loaded scripts list.
 void add_loaded_script(LoadedScript *script) {
     script->next = loaded_scripts;
     loaded_scripts = script;
 }
 
+// Removes a LoadedScript from the loaded scripts list and frees resources
 void remove_loaded_script(LoadedScript *script) {
-    // Remove the script from the loaded_scripts list
     LoadedScript *current = loaded_scripts;
     LoadedScript *prev = NULL;
 
@@ -897,34 +886,36 @@ void remove_loaded_script(LoadedScript *script) {
     }
 }
 
+// Initializes the frame store and related data structures
 void init_frame_store() {
     for (int i = 0; i < NUM_FRAMES; i++) {
-        frame_occupied[i] = 0;
-        frame_last_used[i] = 0; // initialize last used time to 0
+        frame_occupied[i] = FREE_FRAME;      
+        frame_last_used[i] = 0;     // initialize last used time to 0
         for (int j = 0; j < FRAME_SIZE; j++) {
             frame_store[i][j][0] = '\0'; // Initialize strings to empty
         }
     }
 }
 
+// Finds a free frame in the frame store
 int find_free_frame() {
     for (int i = 0; i < NUM_FRAMES; i++) {
-        if (frame_occupied[i] == 0) {
+        if (frame_occupied[i] == FREE_FRAME) {
             return i;
         }
     }
     return -1; // No free frames
 }
 
+// Loads a page into a specified frame
 void load_page_into_frame(char page_lines[FRAME_SIZE][MAX_LINE_LENGTH], int frame_number) {
     for (int i = 0; i < FRAME_SIZE; i++) {
         strcpy(frame_store[frame_number][i], page_lines[i]);
     }
-    // Not setting occupied!
-    frame_occupied[frame_number] = 1;
+    frame_occupied[frame_number] = OCCUIPED_FRAME;
 }
 
-// Copy script data to backing store and initialize page table for loaded script
+// Copy script data to backing store and initialize page table
 void copy_script_to_backing_store(LoadedScript *loaded_script) {
     // Generate a unique backing store filename
     char *backing_store_filename = generate_backing_store_filename(loaded_script->script_name);
@@ -968,10 +959,11 @@ void copy_script_to_backing_store(LoadedScript *loaded_script) {
         return;
     }
     for (int i = 0; i < loaded_script->pages_max; i++) {
-        loaded_script->pageTable[i] = -1;
+        loaded_script->pageTable[i] = PAGE_NOT_LOADED;
     }
 }
 
+// Loads the initial 2 pages of a script into frames
 int load_script_initial_pages(LoadedScript *loaded_script) {
     // Open the backing store file
     FILE *file = fopen(loaded_script->backing_store_filename, "r");
@@ -999,16 +991,14 @@ int load_script_initial_pages(LoadedScript *loaded_script) {
             }
         }
 
-        // Find a free frame
         int frame_number = find_free_frame();
-        if (frame_number == -1) {
+        if (frame_number == PAGE_NOT_LOADED) {
             // Theoretically shouldn't never happen at the start up
             printf("Error: No free frames available\n");
             fclose(file);
             return -1;
         }
 
-        // Load the page into the frame
         load_page_into_frame(page_lines, frame_number);
 
         // Update the page table
@@ -1019,10 +1009,10 @@ int load_script_initial_pages(LoadedScript *loaded_script) {
     return 0;  // Success
 }
 
-// Function to generate a unique filename for the backing store
+// Generate a unique filename for the backing store
 char* generate_backing_store_filename(const char* script_name) {
     static int backing_store_counter = 0;
-    char* filename = malloc(256);  // Adjust size as needed
+    char* filename = malloc(256);
 
     if (filename == NULL) {
         fprintf(stderr, "Error: Unable to allocate memory for backing store filename\n");
@@ -1034,12 +1024,12 @@ char* generate_backing_store_filename(const char* script_name) {
     return filename;
 }
 
+// Handles a page fault by loading the missing page into memory.
 void handle_page_fault(PCB *pcb) {
-    // Try to find a free frame
     int frame_number = find_free_frame();
 
-    if (frame_number == -1) {
-        // No free frames; need to evict a victim frame
+    if (frame_number == PAGE_NOT_LOADED) {
+        // No free frames; need to evict a victim frame using LRU
         frame_number = evict_lru_frame();
 
         // Print victim page contents
@@ -1060,7 +1050,7 @@ void handle_page_fault(PCB *pcb) {
     int success = load_page_into_memory(pcb->loaded_script, pcb->PC_page, frame_number);
     if (success != 0) {
         printf("Error: Could not load page %d for PID %d\n", pcb->PC_page, pcb->pid);
-        // Handle error (e.g., terminate process)
+        // Handle error
         pcb->loaded_script->ref_count--;
         if (pcb->loaded_script->ref_count == 0) {
             free(pcb->loaded_script->pageTable);
@@ -1075,15 +1065,17 @@ void handle_page_fault(PCB *pcb) {
     pcb->loaded_script->pageTable[pcb->PC_page] = frame_number;
 }
 
+// Evicts a random frame
 int evict_random_frame() {
     int victim_frame = rand() % NUM_FRAMES;
 
     // Mark the frame as free
-    frame_occupied[victim_frame] = 0;
+    frame_occupied[victim_frame] = FREE_FRAME;
 
     return victim_frame;
 }
 
+// Updates the page tables of all processes after a frame is evicted
 void update_page_tables(int frame_number) {
     // Iterate over all loaded scripts and their page tables
     LoadedScript *current_script = loaded_scripts;  // head pointer to the list
@@ -1091,7 +1083,7 @@ void update_page_tables(int frame_number) {
         for (int i = 0; i < current_script->pages_max; i++) {
             if (current_script->pageTable[i] == frame_number) {
                 // Invalidate the page table entry
-                current_script->pageTable[i] = -1;
+                current_script->pageTable[i] = PAGE_NOT_LOADED;
                 break;  // Assuming a frame is only in one page table
             }
         }
@@ -1099,6 +1091,7 @@ void update_page_tables(int frame_number) {
     }
 }
 
+// Loads a page into memory from the backing store
 int load_page_into_memory(LoadedScript *loaded_script, int page_number, int frame_number) {
     // Open the backing store file
     FILE *file = fopen(loaded_script->backing_store_filename, "r");
@@ -1136,19 +1129,18 @@ int load_page_into_memory(LoadedScript *loaded_script, int page_number, int fram
     }
     fclose(file);
 
-    // Load the page into the frame
     load_page_into_frame(page_lines, frame_number);
 
     // Update global time and frame last used time
     global_time++;
     frame_last_used[frame_number] = global_time;
 
-    // Update frame occupancy
-    frame_occupied[frame_number] = 1;
+    frame_occupied[frame_number] = OCCUIPED_FRAME;
 
     return 0; // Success
 }
 
+// Evicts a frame based on the Least Recently Used (LRU) policy
 int evict_lru_frame() {
     int lru_frame = -1;
     int min_time = global_time + 1; // Set to a value higher than any possible last_used_time
@@ -1165,8 +1157,7 @@ int evict_lru_frame() {
         exit(1); 
     }
 
-    // Mark the frame as free
-    frame_occupied[lru_frame] = 0;
+    frame_occupied[lru_frame] = FREE_FRAME;
 
     return lru_frame;
 }

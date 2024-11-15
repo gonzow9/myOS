@@ -18,7 +18,7 @@ void init_frame_store();
 int main(int argc, char *argv[]) {
     // Initialize random seed
     srand(time(NULL));
-    printf("”Frame Store Size = %d; Variable Store Size = %d”\n\n", FRAME_STORE_SIZE, VARIABLE_STORE_SIZE);
+    printf("Frame Store Size = %d; Variable Store Size = %d\n\n", FRAME_STORE_SIZE, VARIABLE_STORE_SIZE);
     //help();
     // Initialize backing store
     init_backing_store();
@@ -26,7 +26,7 @@ int main(int argc, char *argv[]) {
     init_frame_store();
 
     char prompt = '$';  				// Shell prompt
-    char userInput[MAX_USER_INPUT];		// user's input stored here
+    char userInput[MAX_USER_INPUT];		// user's input stored here 
     int errorCode = 0;					// zero means no error, default
 
     //init user input
