@@ -6,6 +6,7 @@
 #include "interpreter.h"
 #include "shellmemory.h"
 #include <ctype.h>
+#include <time.h>
 
 #define MAX_COMMANDS 10
 
@@ -15,6 +16,8 @@ void init_frame_store();
 
 // Start of everything
 int main(int argc, char *argv[]) {
+    // Initialize random seed
+    srand(time(NULL));
     printf("”Frame Store Size = %d; Variable Store Size = %d”\n\n", FRAME_STORE_SIZE, VARIABLE_STORE_SIZE);
     //help();
     // Initialize backing store
