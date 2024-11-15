@@ -1,4 +1,0 @@
-set a good
-print a
-run ../test-cases/set.txt
-quit
