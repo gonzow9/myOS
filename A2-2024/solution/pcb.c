@@ -32,6 +32,7 @@ struct PCB *create_process(const char *filename) {
     struct PCB *pcb = create_process_from_FILE(script);
     // Update the pcb name according to the filename we received.
     pcb->name = strdup(filename);
+    return pcb;
 }
 
 struct PCB *create_process_from_FILE(FILE *script) {
@@ -50,6 +51,11 @@ struct PCB *create_process_from_FILE(FILE *script) {
 
     // pc is always initially 0.
     pcb->pc = 0;
+
+    // Initialise thread support
+    pcb->thread_count = 0;
+    pcb->threads = NULL;
+    pthread_mutex_init(&pcb->process_mutex, NULL);
 
     // create initial values for base and count, in case we fail to read
     // any lines from the file. That way we'll end up with an empty process
@@ -96,6 +102,17 @@ struct PCB *create_process_from_FILE(FILE *script) {
 }
 
 void free_pcb(struct PCB *pcb) {
+    // Free all threads first
+    struct TCB *current_thread = pcb->threads;
+    while (current_thread) {
+        struct TCB *next_thread = current_thread->next;
+        free_thread(current_thread);
+        current_thread = next_thread;
+    }
+    
+    // Destroy the mutex
+    pthread_mutex_destroy(&pcb->process_mutex);
+    
     for (size_t ix = pcb->line_base; ix < pcb->line_base + pcb->line_count; ++ix) {
         free_line(ix);
     }
@@ -105,4 +122,67 @@ void free_pcb(struct PCB *pcb) {
         free(pcb->name);
     }
     free(pcb);
+}
+
+// Thread management functions
+struct TCB *create_thread(struct PCB *parent) {
+    struct TCB *thread = malloc(sizeof(struct TCB));
+    if (!thread) return NULL;
+    
+    static tid fresh_tid = 1;
+    thread->tid = fresh_tid++;
+    thread->parent_pcb = parent;
+    thread->pc = 0; // Start from beginning
+    thread->stack_base = 0; // Will be allocated when needed
+    thread->stack_size = 0;
+    thread->state = 0; // Ready state
+    thread->next = NULL;
+    
+    return thread;
+}
+
+void free_thread(struct TCB *thread) {
+    if (thread) {
+        free(thread);
+    }
+}
+
+int tcb_has_next_instruction(struct TCB *tcb) {
+    return tcb->pc < tcb->parent_pcb->line_count;
+}
+
+size_t tcb_next_instruction(struct TCB *tcb) {
+    size_t i = tcb->parent_pcb->line_base + tcb->pc;
+    tcb->pc++;
+    return i;
+}
+
+void add_thread_to_process(struct PCB *pcb, struct TCB *thread) {
+    pthread_mutex_lock(&pcb->process_mutex);
+    
+    // Add to the beginning of the thread list
+    thread->next = pcb->threads;
+    pcb->threads = thread;
+    pcb->thread_count++;
+    
+    pthread_mutex_unlock(&pcb->process_mutex);
+}
+
+void remove_thread_from_process(struct PCB *pcb, struct TCB *thread) {
+    pthread_mutex_lock(&pcb->process_mutex);
+    
+    if (pcb->threads == thread) {
+        pcb->threads = thread->next;
+    } else {
+        struct TCB *current = pcb->threads;
+        while (current && current->next != thread) {
+            current = current->next;
+        }
+        if (current) {
+            current->next = thread->next;
+        }
+    }
+    pcb->thread_count--;
+    
+    pthread_mutex_unlock(&pcb->process_mutex);
 }

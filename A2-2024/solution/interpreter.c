@@ -21,11 +21,18 @@
 #include "schedule_policy.h"
 #include "shellmemory.h"
 #include "shell.h"
+#include "thread_scheduler.h"
 
 #define true 1
 #define false 0
 
 #define MAX_ARGS_SIZE 7
+
+// Global variables for multi-threading and background execution
+static int multithreaded = false;
+static int background = false;
+static struct queue *q = NULL;
+static const struct schedule_policy *policy = NULL;
 
 int badcommand() {
     printf("Unknown Command\n");
@@ -375,11 +382,23 @@ int cd(char *path) {
 }
 
 void runSchedule(struct queue *q, const struct schedule_policy *policy) {
-    struct PCB *next_pcb = policy->dequeue(q);
-    while (next_pcb) {
-        next_pcb = policy->run_pcb(next_pcb);
-        if (next_pcb) policy->enqueue(q, next_pcb);
-        next_pcb = policy->dequeue(q);
+    if (multithreaded) {
+        // Multi-threaded execution
+        struct PCB *next_pcb = policy->dequeue(q);
+        while (next_pcb) {
+            // Run process with multiple threads (default 4 threads)
+            run_process_multithreaded(next_pcb, 4);
+            free_pcb(next_pcb);
+            next_pcb = policy->dequeue(q);
+        }
+    } else {
+        // Single-threaded execution (original behavior)
+        struct PCB *next_pcb = policy->dequeue(q);
+        while (next_pcb) {
+            next_pcb = policy->run_pcb(next_pcb);
+            if (next_pcb) policy->enqueue(q, next_pcb);
+            next_pcb = policy->dequeue(q);
+        }
     }
 }
 
@@ -426,10 +445,6 @@ int run(char *script) {
 // Despite the top-level availability of these variables, global state is
 // rather confusing to work with. So functions like runSchedule() above
 // still take these values as arguments so they're easier to track.
-static int multithreaded = false;
-static int background = false;
-static struct queue *q = NULL;
-static const struct schedule_policy *policy = NULL;
 
 int my_exec(char *args[], int args_size) {
     // Two inputs is the minimum. This should be checked above, but sanity:
@@ -460,9 +475,11 @@ int my_exec(char *args[], int args_size) {
     // We check from the end, so we have to check in reverse order.
     // Look for MT first.
     if (strcmp(args[args_size-1], "MT") == 0) {
-        // TODO: if multithreaded was previously false, call function
-        // to initialize multithreaded scheduler here.
-        multithreaded = true;
+        // Initialize multithreaded mode
+        if (!multithreaded) {
+            multithreaded = true;
+            printf("Multi-threading enabled\n");
+        }
         // "remove" MT from the arguments by decrementing args size.
         args_size--;
     }

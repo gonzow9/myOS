@@ -1,0 +1,4 @@
+echo 'Hello from thread 1'
+echo 'Hello from thread 2'
+echo 'Hello from thread 3'
+echo 'Hello from thread 4'
